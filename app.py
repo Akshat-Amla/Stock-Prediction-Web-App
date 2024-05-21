@@ -1,125 +1,177 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas_datareader as data
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
-from datetime import datetime, timedelta
+import plotly.graph_objs as go
+import datetime as dt
 
-# Fetch the stock price data based on user input start date
-st.title('Stock Trend Prediction')
-user_input = st.text_input('Enter Stock Ticker', 'AAPL')
-start_date_input = st.text_input('Enter Start Date (YYYY-MM-DD) minimum time should be 2 years', '2010-01-01')
-start_date = datetime.strptime(start_date_input, '%Y-%m-%d')
-end_date = datetime.now()
+# Load ticker.csv file into a Pandas DataFrame
+def load_data():
+    df = pd.read_csv('ticker.csv')
+    return df
+df = load_data()
 
-df = yf.download(user_input, start=start_date, end=end_date)
+# Display a text input box for the user to enter the company name
+user_input = st.text_input('Enter Company Name')
 
-# Describing Data
-st.subheader('Data from {} to {}'.format(start_date.date(), end_date.date()))
-st.write(df.describe())
+# Filter DataFrame based on user input to find matching company names
+matching_companies = df[df['Company Name'].str.contains(
+    user_input, case=False)]
 
-# Visualizations
-st.subheader('Closing Price vs Time chart')
-fig = plt.figure(figsize=(12, 6))
-# Assuming the column name is 'Close' (case-sensitive)
-plt.plot(df.index, df['Close'])
-plt.xlabel('Date')
-plt.ylabel('Closing Price')
-plt.title('Closing Price vs Time')
-st.pyplot(fig)
+# Display the matching company names as recommendations
+if not matching_companies.empty:
+    selected_company = st.selectbox(
+        "Select a Company:", matching_companies['Company Name'])
+    user_input = matching_companies.loc[matching_companies['Company Name']
+                                        == selected_company, 'Ticker'].iloc[0]
+    st.write(f"Selected Ticker: {user_input}")
+else:
+    st.write("No matching companies found.")
 
-st.subheader('Closing Price vs Time chart with 100MA')
-ma100 = df.Close.rolling(100).mean()
-fig = plt.figure(figsize=(12, 6))
-plt.plot(ma100)
-# Assuming the column name is 'Close' (case-sensitive)
-plt.plot(df.index, df['Close'])
-plt.xlabel('Date')
-plt.ylabel('Closing Price')
-plt.title('Closing Price vs Time')
-st.pyplot(fig)
+# Create a Plotly figure for the Closing Price vs Time chart
+if st.button('Submit'):
+    try:
+        df = yf.download(user_input, start='2000-01-01', end=dt.datetime.now())
 
-st.subheader('Closing Price vs Time chart with 100MA & 200MA')
-ma100 = df.Close.rolling(100).mean()
-ma200 = df.Close.rolling(200).mean()
-fig = plt.figure(figsize=(12, 6))
-plt.plot(ma100, 'r')
-plt.plot(ma200, 'g')
-# Assuming the column name is 'Close' (case-sensitive)
-plt.plot(df.index, df['Close'], 'b')
-plt.xlabel('Date')
-plt.ylabel('Closing Price')
-plt.title('Closing Price vs Time')
-st.pyplot(fig)
+        # Check if the data size is less than 2 years (approximately 730 days)
+        if len(df) < 730:
+            raise ValueError(
+                "Data size is less than 2 years.")
+        fig = go.Figure()
+        # Add trace for closing price
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['Close'], mode='lines', name='Closing Price'))
 
-# Split the data into training and testing sets
-data_training = pd.DataFrame(df['Close'][0:int(len(df)*0.70)])
-data_testing = pd.DataFrame(df['Close'][int(len(df)*0.70): int(len(df))])
+        # Customize layout
+        fig.update_layout(
+            title='Closing Price vs Time',
+            xaxis_title='Date',
+            yaxis_title='Closing Price',
+        )
 
-print(data_training.shape)
-print(data_testing.shape)
+        # Display the interactive Plotly chart
+        st.plotly_chart(fig)
 
-# scaling down the training data
-scaler = MinMaxScaler(feature_range=(0, 1))
-data_training_array = scaler.fit_transform(data_training)
+        # Calculate 100-day Moving Average
+        ma100 = df['Close'].rolling(window=100).mean()
 
-# Load my model
-model = load_model('keras_model.h5')
+        # Create a Plotly figure for the Closing Price vs Time chart with 100MA
+        fig = go.Figure()
 
-# Testing Part
-past_100_days = data_training.tail(100)
+        # Add trace for 100-day Moving Average
+        fig.add_trace(go.Scatter(x=df.index, y=ma100, mode='lines',
+                                name='100-day Moving Average', line=dict(color='red')))
 
-# Concatenate the two DataFrames vertically
-final_df = pd.concat([past_100_days, data_testing], ignore_index=True)
-input_data = scaler.fit_transform(final_df)
+        # Add trace for closing price
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['Close'], mode='lines', name='Closing Price', line=dict(color='blue')))
 
-x_test = []
-y_test = []
+        # Customize layout
+        fig.update_layout(
+            title='Closing Price vs Time with 100-day Moving Average',
+            xaxis_title='Date',
+            yaxis_title='Price',
+        )
 
-for i in range(100, input_data.shape[0]):
-    x_test.append(input_data[i-100: i])
-    y_test.append(input_data[i, 0])
+        # Display the interactive Plotly chart
+        st.plotly_chart(fig)
 
-x_test, y_test = np.array(x_test), np.array(y_test)
-y_predicted = model.predict(x_test)
-scaler = scaler.scale_
+        # Calculate 200-day Moving Averages
+        ma200 = df['Close'].rolling(window=200).mean()
 
-scale_factor = 1/scaler[0]
-y_predicted = y_predicted * scale_factor
-y_test = y_test * scale_factor
+        # Create a Plotly figure for the Closing Price vs Time chart with 100MA & 200MA
+        fig = go.Figure()
 
-# final graph
-st.subheader('Predictions vs Original')
-fig2 = plt.figure(figsize=(12, 6))
-plt.plot(y_test, 'b', label='original price')
-plt.plot(y_predicted, 'r', label='Predicted Price')
-plt.xlabel('Date')
-plt.xlabel('Price')
-plt.legend()
-st.pyplot(fig2)
+        # Add trace for 100-day Moving Average
+        fig.add_trace(go.Scatter(x=df.index, y=ma100, mode='lines',
+                                name='100-day Moving Average', line=dict(color='red')))
 
-# Function to predict stock prices for the specified number of weeks
-def predict_future_prices(weeks):
-    future_dates = [end_date + timedelta(weeks=i) for i in range(1, weeks+1)]
-    future_data = pd.DataFrame(index=pd.date_range(start=end_date + timedelta(days=1), periods=7*weeks, freq='D'), columns=['Predicted Price'])
-    last_100_days = data_testing.tail(100).values.reshape(-1, 1)
-    for i in range(weeks):
-        for j in range(7):
-            x_input = last_100_days[-100:]
-            x_input = x_input.reshape((1, 100, 1))
-            y_pred = model.predict(x_input)[0][0]
-            future_data.iloc[i*7 + j]['Predicted Price'] = y_pred
-            last_100_days = np.append(last_100_days, [[y_pred]], axis=0)
-    return future_data
+        # Add trace for 200-day Moving Average
+        fig.add_trace(go.Scatter(x=df.index, y=ma200, mode='lines',
+                                name='200-day Moving Average', line=dict(color='green')))
 
-# Get user input for number of weeks
-num_weeks = st.number_input('Enter number of weeks for future prediction', min_value=1, step=1)
+        # Add trace for closing price
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['Close'], mode='lines', name='Closing Price', line=dict(color='blue')))
 
-# Predict future prices and display as a table
-if st.button('Predict Future Prices'):
-    future_prices = predict_future_prices(num_weeks)
-    st.subheader('Predicted Stock Prices for the Next {} Weeks'.format(num_weeks))
-    st.table(future_prices)
+        # Customize layout
+        fig.update_layout(
+            title='Closing Price vs Time with 100-day & 200-day Moving Averages',
+            xaxis_title='Date',
+            yaxis_title='Price',
+        )
+
+        # Display the interactive Plotly chart
+        st.plotly_chart(fig)
+
+        # # Function to predict stock prices for a whole week
+
+        def predict_weekly_prices(model, scaler, past_data):
+            future_predictions = []
+
+            for _ in range(7):
+                # Ensure the past_data is reshaped to 2D array (if not already)
+                if len(past_data.shape) == 1:
+                    past_data = past_data.reshape(-1, 1)
+                # Scale the input data
+                scaled_input_data = scaler.transform(
+                    past_data[-300:])  # Increase window size to 200
+
+                # Reshape input data for prediction
+                x_test = scaled_input_data.reshape(1, 300, 1)  # Adjust window size
+
+                # Make prediction
+                predicted_price = model.predict(x_test)
+
+                # Inverse scaling to get the actual price
+                predicted_price = scaler.inverse_transform(predicted_price)
+
+                # Append the predicted price to the list of future predictions
+                future_predictions.append(predicted_price[0, 0])
+
+                # Update input data for the next prediction
+                past_data = np.append(past_data, predicted_price)
+
+            return future_predictions
+
+        # Load the model
+        model = load_model('keras_model.h5')
+        # Load past data (replace this with your actual past data)
+        past_data = df[len(df)-300:len(df)]['Close']
+        # Convert the Series to a DataFrame
+        past_data_df = past_data.reset_index().tail(7)
+        past_data_df.columns = ['Date', 'Close']
+
+        # Display the last seven days of prices without the index
+        st.subheader('Prices for last seven days')
+        st.write(past_data_df.to_html(index=False), unsafe_allow_html=True)
+
+        # Convert pandas Series to NumPy array
+        past_data_array = past_data.to_numpy()
+
+        # Recreate the scaler and fit it to past data
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaler.fit(past_data_array.reshape(-1, 1))  # Corrected the reshaping here
+
+        # Predict stock prices for the next 7 days
+        weekly_predictions = predict_weekly_prices(model, scaler, past_data_array)
+
+        # Generate dates for the next 7 days
+        last_date = df.index[-1]
+        next_week_dates = pd.date_range(
+            last_date + dt.timedelta(days=1), periods=7)
+
+        # Combine dates and predicted prices into a DataFrame
+        weekly_predictions_df = pd.DataFrame({
+            'Date': next_week_dates,
+            'Predicted Price': weekly_predictions
+        })
+
+        # Display the predicted prices for the next week with corresponding dates on Streamlit without index
+        st.subheader('Predicted Prices for the Next Week')
+        st.write(weekly_predictions_df.to_html(
+            index=False), unsafe_allow_html=True)
+    except ValueError as e:
+        st.error(str(e))
