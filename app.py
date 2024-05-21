@@ -123,7 +123,3 @@ if st.button('Predict Future Prices'):
     future_prices = predict_future_prices(num_weeks)
     st.subheader('Predicted Stock Prices for the Next {} Weeks'.format(num_weeks))
     st.table(future_prices)
-
-
-
-
