@@ -7,7 +7,7 @@ The project focuses on predicting stock trends by utilizing machine learning mod
 ### Libraries Used
 
 - **numpy**: Utilized for its powerful numerical computation capabilities, such as array manipulation and mathematical operations.
-- **matplotlib.pyplot**: Employed for creating visualizations, specifically for plotting stock price data and technical indicators.
+- **plotly.graph_objs**: Employed for creating visualizations, specifically for plotting stock price data and technical indicators.
 - **pandas_datareader**: Used to fetch historical stock price data from various online sources, facilitating data acquisition for analysis.
 - **streamlit**: Chosen for building the user interface due to its simplicity and ease of use in creating interactive web applications.
 - **yfinance**: Integrated for fetching stock data directly from Yahoo Finance, ensuring reliable and up-to-date information for analysis.
